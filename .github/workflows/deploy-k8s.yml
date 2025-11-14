@@ -15,26 +15,23 @@ jobs:
   validate:
     name: Validate Manifests
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Validate YAML syntax
       run: |
-        # Instalar yamllint
         sudo apt-get update
         sudo apt-get install -y yamllint
-        
-        # Validar sintaxe
         echo "Validando arquivos YAML..."
         yamllint -c .yamllint manifests/*.yaml || true
-    
+
     - name: Install kubectl
       uses: azure/setup-kubectl@v3
       with:
         version: ${{ env.KUBECTL_VERSION }}
-    
+
     - name: Dry-run dos manifestos
       run: |
         echo "Testando aplicacao dos manifestos (dry-run)..."
@@ -49,26 +46,24 @@ jobs:
     needs: validate
     if: github.ref == 'refs/heads/main'
     environment: production
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
-     - name: Setup SSH
+
+    - name: Setup SSH
       env:
         SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         SSH_HOST: ${{ secrets.SSH_HOST }}
         SSH_USER: ${{ secrets.SSH_USER }}
       run: |
-        set -x   # <--- ISSO AQUI MOSTRA TUDO!
-        
+        set -x
         mkdir -p ~/.ssh
         echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
-
         ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "echo 'Conexao SSH estabelecida!'"
-    
+
     - name: Copy manifests to VM
       env:
         SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -78,7 +73,7 @@ jobs:
         ssh $SSH_USER@$SSH_HOST "mkdir -p ~/k8s-manifests"
         scp -r manifests/* $SSH_USER@$SSH_HOST:~/k8s-manifests/
         echo "Manifestos copiados com sucesso!"
-    
+
     - name: Deploy to K3s
       env:
         SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -88,29 +83,26 @@ jobs:
         ssh $SSH_USER@$SSH_HOST << 'ENDSSH'
           set -e
           export KUBECONFIG=~/.kube/config
-          
+
           echo "=== Iniciando Deploy ==="
-          
-          # Criar namespace se nao existir
+
           kubectl get namespace producao || kubectl create namespace producao
-          
-          # Aplicar manifestos
+
           echo "Aplicando ConfigMap..."
           kubectl apply -f ~/k8s-manifests/nginx-configmap.yaml
-          
+
           echo "Aplicando Deployment..."
           kubectl apply -f ~/k8s-manifests/nginx-deployment-custom.yaml
-          
+
           echo "Aplicando Service..."
           kubectl apply -f ~/k8s-manifests/nginx-service.yaml
-          
-          # Aguardar rollout
+
           echo "Aguardando rollout completar..."
           kubectl rollout status deployment/nginx-deployment -n producao --timeout=5m
-          
+
           echo "=== Deploy Concluido ==="
         ENDSSH
-    
+
     - name: Verify Deployment
       env:
         SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -118,25 +110,20 @@ jobs:
       run: |
         ssh $SSH_USER@$SSH_HOST << 'ENDSSH'
           export KUBECONFIG=~/.kube/config
-          
+
           echo "=== Verificando Deploy ==="
-          
-          # Status dos recursos
           kubectl get deployments -n producao
           kubectl get pods -n producao
           kubectl get services -n producao
-          
-          # Obter informacoes de acesso
+
           NODEPORT=$(kubectl get service nginx-service -n producao -o jsonpath='{.spec.ports[0].nodePort}')
           PUBLIC_IP=$(curl -s ifconfig.me)
-          
-          echo ""
+
           echo "========================================="
           echo "Deploy concluido com sucesso!"
           echo "URL: http://$PUBLIC_IP:$NODEPORT"
           echo "========================================="
-          
-          # Teste basico
+
           echo "Testando aplicacao..."
           if curl -f -s http://localhost:$NODEPORT > /dev/null; then
             echo "Teste OK!"
@@ -146,14 +133,14 @@ jobs:
             exit 1
           fi
         ENDSSH
-    
+
     - name: Send success notification
       if: success()
       run: |
         echo "Deploy concluido com sucesso!"
         echo "Commit: ${{ github.sha }}"
         echo "Branch: ${{ github.ref }}"
-    
+
     - name: Send failure notification
       if: failure()
       run: |
