@@ -54,18 +54,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Setup SSH
+     - name: Setup SSH
       env:
         SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         SSH_HOST: ${{ secrets.SSH_HOST }}
         SSH_USER: ${{ secrets.SSH_USER }}
       run: |
+        set -x   # <--- ISSO AQUI MOSTRA TUDO!
+        
         mkdir -p ~/.ssh
         echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
-        
-        # Testar conexao
+
         ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "echo 'Conexao SSH estabelecida!'"
     
     - name: Copy manifests to VM
