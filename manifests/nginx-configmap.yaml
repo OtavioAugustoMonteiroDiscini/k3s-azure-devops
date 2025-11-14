@@ -39,7 +39,7 @@ data:
     </head>
     <body>
         <div class="container">
-            <h1>🚀 K3s no Azure</h1>
+            <h1>🚀 K3s no Azure - deploy automatico</h1>
             <p>Kubernetes funcionando com sucesso!</p>
             <div class="hostname">
                 <strong>Pod:</strong> <span id="hostname">Loading...</span>
