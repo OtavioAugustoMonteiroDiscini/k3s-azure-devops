@@ -1,149 +1,61 @@
-name: Deploy to K3s Azure
+name: Deploy para Servidor
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
-
-env:
-  NAMESPACE: producao
-  KUBECTL_VERSION: v1.28.0
+    branches:
+      - main
 
 jobs:
-  validate:
-    name: Validate Manifests
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Validate YAML syntax
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y yamllint
-        echo "Validando arquivos YAML..."
-        yamllint -c .yamllint manifests/*.yaml || true
-
-    - name: Install kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: ${{ env.KUBECTL_VERSION }}
-
-    - name: Dry-run dos manifestos
-      run: |
-        echo "Testando aplicacao dos manifestos (dry-run)..."
-        for file in manifests/*.yaml; do
-          echo "Validando $file"
-          kubectl apply -f $file --dry-run=client || echo "Aviso: Erro em $file"
-        done
-
   deploy:
-    name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: validate
-    if: github.ref == 'refs/heads/main'
-    environment: production
+
+    env:
+      NAMESPACE: producao
+      KUBECTL_VERSION: v1.28.0
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout código
+        uses: actions/checkout@v3
 
-    - name: Setup SSH
-      env:
-        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-        SSH_HOST: ${{ secrets.SSH_HOST }}
-        SSH_USER: ${{ secrets.SSH_USER }}
-      run: |
-        set -x
-        mkdir -p ~/.ssh
-        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
-        ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "echo 'Conexao SSH estabelecida!'"
+      - name: Instalar Kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
 
-    - name: Copy manifests to VM
-      env:
-        SSH_HOST: ${{ secrets.SSH_HOST }}
-        SSH_USER: ${{ secrets.SSH_USER }}
-      run: |
-        echo "Copiando manifestos para VM..."
-        ssh $SSH_USER@$SSH_HOST "mkdir -p ~/k8s-manifests"
-        scp -r manifests/* $SSH_USER@$SSH_HOST:~/k8s-manifests/
-        echo "Manifestos copiados com sucesso!"
+      - name: Configurar SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -x
+          mkdir -p ~/.ssh
 
-    - name: Deploy to K3s
-      env:
-        SSH_HOST: ${{ secrets.SSH_HOST }}
-        SSH_USER: ${{ secrets.SSH_USER }}
-        NAMESPACE: ${{ env.NAMESPACE }}
-      run: |
-        ssh $SSH_USER@$SSH_HOST << 'ENDSSH'
-          set -e
-          export KUBECONFIG=~/.kube/config
+          # Cria a chave privada
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
 
-          echo "=== Iniciando Deploy ==="
+          # Corrige falhas do ssh-keyscan
+          ssh-keyscan -T 5 -H $SSH_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
 
-          kubectl get namespace producao || kubectl create namespace producao
+          # Testa conexão
+          ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "echo 'Conexao SSH estabelecida!'"
 
-          echo "Aplicando ConfigMap..."
-          kubectl apply -f ~/k8s-manifests/nginx-configmap.yaml
+      - name: Deploy no servidor
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
+            echo 'Iniciando deploy no servidor...'
+            cd /home/azureuser/projeto-k8s
+            git pull
+            kubectl apply -f deployment.yaml -n ${NAMESPACE}
+            kubectl apply -f service.yaml -n ${NAMESPACE}
+            echo 'Deploy finalizado com sucesso!'
+          "
 
-          echo "Aplicando Deployment..."
-          kubectl apply -f ~/k8s-manifests/nginx-deployment-custom.yaml
+      - name: Sucesso
+        run: echo "Deploy concluído com sucesso!"
 
-          echo "Aplicando Service..."
-          kubectl apply -f ~/k8s-manifests/nginx-service.yaml
-
-          echo "Aguardando rollout completar..."
-          kubectl rollout status deployment/nginx-deployment -n producao --timeout=5m
-
-          echo "=== Deploy Concluido ==="
-        ENDSSH
-
-    - name: Verify Deployment
-      env:
-        SSH_HOST: ${{ secrets.SSH_HOST }}
-        SSH_USER: ${{ secrets.SSH_USER }}
-      run: |
-        ssh $SSH_USER@$SSH_HOST << 'ENDSSH'
-          export KUBECONFIG=~/.kube/config
-
-          echo "=== Verificando Deploy ==="
-          kubectl get deployments -n producao
-          kubectl get pods -n producao
-          kubectl get services -n producao
-
-          NODEPORT=$(kubectl get service nginx-service -n producao -o jsonpath='{.spec.ports[0].nodePort}')
-          PUBLIC_IP=$(curl -s ifconfig.me)
-
-          echo "========================================="
-          echo "Deploy concluido com sucesso!"
-          echo "URL: http://$PUBLIC_IP:$NODEPORT"
-          echo "========================================="
-
-          echo "Testando aplicacao..."
-          if curl -f -s http://localhost:$NODEPORT > /dev/null; then
-            echo "Teste OK!"
-            exit 0
-          else
-            echo "Teste FALHOU!"
-            exit 1
-          fi
-        ENDSSH
-
-    - name: Send success notification
-      if: success()
-      run: |
-        echo "Deploy concluido com sucesso!"
-        echo "Commit: ${{ github.sha }}"
-        echo "Branch: ${{ github.ref }}"
-
-    - name: Send failure notification
-      if: failure()
-      run: |
-        echo "Deploy falhou!"
-        echo "Verifique os logs acima"
-        exit 1
