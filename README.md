@@ -92,3 +92,9 @@ Configure no GitHub:
 ## 📝 Licença
 
 MIT License - Projeto educacional
+
+## 🎯 Status
+
+[![Deploy to K3s Azure](https://github.com/SEU_USUARIO/k3s-azure-devops/actions/workflows/deploy-k8s.yml/badge.svg)](https://github.com/SEU_USUARIO/k3s-azure-devops/actions/workflows/deploy-k8s.yml)
+
+Última atualização: $(date)
