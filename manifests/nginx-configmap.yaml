@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-html
+  namespace: producao
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>K3s no Azure</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+            }
+            .container {
+                text-align: center;
+                background: rgba(255,255,255,0.1);
+                padding: 50px;
+                border-radius: 20px;
+                backdrop-filter: blur(10px);
+            }
+            h1 { font-size: 3em; margin: 0; }
+            p { font-size: 1.5em; }
+            .hostname { 
+                background: rgba(0,0,0,0.3);
+                padding: 10px 20px;
+                border-radius: 10px;
+                margin-top: 20px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🚀 K3s no Azure</h1>
+            <p>Kubernetes funcionando com sucesso!</p>
+            <div class="hostname">
+                <strong>Pod:</strong> <span id="hostname">Loading...</span>
+            </div>
+            <p style="font-size: 1em; margin-top: 30px;">
+                Azure for Students + K3s + DevOps
+            </p>
+        </div>
+        <script>
+            fetch('/hostname.txt')
+                .then(r => r.text())
+                .then(h => document.getElementById('hostname').textContent = h)
+                .catch(() => document.getElementById('hostname').textContent = 'Unknown');
+        </script>
+    </body>
+    </html>

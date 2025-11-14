@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  namespace: producao
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25-alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html/index.html
+          subPath: index.html
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - hostname > /usr/share/nginx/html/hostname.txt
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+      volumes:
+      - name: html
+        configMap:
+          name: nginx-html

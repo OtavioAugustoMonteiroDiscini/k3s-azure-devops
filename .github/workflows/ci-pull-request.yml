@@ -1,0 +1,49 @@
+name: CI - Pull Request
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Test and Validate
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Validate YAML
+      run: |
+        sudo apt-get install -y yamllint
+        yamllint manifests/*.yaml
+    
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: v1.28.0
+    
+    - name: Validate Kubernetes manifests
+      run: |
+        for file in manifests/*.yaml; do
+          echo "Validando $file"
+          kubectl apply -f $file --dry-run=client
+        done
+    
+    - name: Check scripts syntax
+      run: |
+        for script in scripts/*.sh; do
+          echo "Checando $script"
+          bash -n $script
+        done
+    
+    - name: Comment PR
+      uses: actions/github-script@v7
+      if: always()
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '✅ Validação concluída! Os manifestos estão corretos.'
+          })

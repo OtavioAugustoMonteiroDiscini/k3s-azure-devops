@@ -1,0 +1,20 @@
+# Kubernetes
+*.kubeconfig
+kubeconfig
+
+# Secrets
+*.pem
+*.key
+.env
+secrets/
+
+# Backups
+k8s-backups/
+*.tar.gz
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
